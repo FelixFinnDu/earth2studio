@@ -20,6 +20,7 @@ from typing import TypeVar
 
 import numpy as np
 import torch
+import torch_sdaa
 
 from earth2studio.models.auto import AutoModelMixin, Package
 from earth2studio.models.batch import batch_coords, batch_func
@@ -158,7 +159,7 @@ class FengWu(torch.nn.Module, AutoModelMixin, PrognosticMixin):
         super().__init__()
 
         self.device = torch.ones(1).device  # Hack to get default device
-        self.ort = create_ort_session(ort, self.device)
+        self.ort = create_ort_session(ort, self.device, 'fengwu')
 
         self.register_buffer("center", center.unsqueeze(-1).unsqueeze(-1))
         self.register_buffer("scale", scale.unsqueeze(-1).unsqueeze(-1))
@@ -228,8 +229,8 @@ class FengWu(torch.nn.Module, AutoModelMixin, PrognosticMixin):
         """Move model (and default ORT session) to device"""
         device = torch.device(device)
         if device.index is None:
-            if device.type == "cuda":
-                device = torch.device(device.type, torch.cuda.current_device())
+            if device.type == "sdaa":
+                device = torch.device(device.type, torch.sdaa.current_device())
             else:
                 device = torch.device(device.type, 0)
 
@@ -241,7 +242,7 @@ class FengWu(torch.nn.Module, AutoModelMixin, PrognosticMixin):
             if self.ort is not None:
                 model_path = self.ort._model_path
                 del self.ort
-                self.ort = create_ort_session(model_path, device)
+                self.ort = create_ort_session(model_path, device, 'fengwu')
 
         return self
 

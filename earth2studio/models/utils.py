@@ -31,6 +31,7 @@ import torch
 def create_ort_session(
     onnx_file: str,
     device: torch.device = torch.device("cpu", 0),
+    model_name: str = None,
 ) -> InferenceSession:
     """Create ORT session on specified device
 
@@ -48,7 +49,7 @@ def create_ort_session(
     """
     if ort is None:
         raise ImportError(
-            "onnxruntime (onnxruntime-gpu) is required for this model. See model install notes for details.\n"
+            "onnxruntime (onnxruntime-sdaa) is required for this model. See model install notes for details.\n"
             + "https://nvidia.github.io/earth2studio/userguide/about/install.html#model-dependencies"
         )
     options = ort.SessionOptions()
@@ -60,19 +61,45 @@ def create_ort_session(
 
     # That will trigger a FileNotFoundError
     os.stat(onnx_file)
-    if device.type == "cuda":
-        if device.index is None:
-            device_index = torch.cuda.current_device()
-        else:
-            device_index = device.index
+    # if device.type == "sdaa":
+    #     if device.index is None:
+    #         device_index = torch.sdaa.current_device()
+    #     else:
+    #         device_index = device.index
+    #     providers = [
+    #         (
+    #             "SDAAExecutionProvider",
+    #             {
+    #                 "device_id": device_index,
+    #             },
+    #         ),
+    #         "CPUExecutionProvider",
+    #     ]
+    # else:
+    #     providers = [
+    #         "CPUExecutionProvider",
+    #     ]
 
+
+    # if 'SDAAExecutionProvider' in ort.get_available_providers():
+    #     providers = [
+    #         (
+    #             "SDAAExecutionProvider",
+    #             {
+    #                 "device_id": device.index,
+    #             },
+    #         ),
+    #         "CPUExecutionProvider",
+    #     ]
+    # else:
+    #     providers = [
+    #         "CPUExecutionProvider",
+    #     ]
+
+    # 暂时先绑定sdaa
+    if model_name in ["fengwu"]:
         providers = [
-            (
-                "CUDAExecutionProvider",
-                {
-                    "device_id": device_index,
-                },
-            ),
+            "SDAAExecutionProvider",
             "CPUExecutionProvider",
         ]
     else:

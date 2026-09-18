@@ -29,7 +29,7 @@ dependencies = [
     "s3fs>=2023.5.0",
     "torch>=2.5.0",
     "tqdm>=4.65.0",
-    "xarray[parallel]>=2023.1.0",
+    "xarray[parallel]>=2023.1.0,<2026.4.0",
     "zarr>=3.1.0",
 ]
 
@@ -174,12 +174,10 @@ fcn3 = [
 fengwu = [
     "onnx",
     "onnxscript",
-    "onnxruntime-gpu>=1.21.0",
 ]
 fuxi = [
     "onnx",
     "onnxscript",
-    "onnxruntime-gpu>=1.21.0",
 ]
 gencast = [
     "graphcast",
@@ -201,7 +199,6 @@ interp-modafno = [
 pangu = [
     "onnx",
     "onnxscript",
-    "onnxruntime-gpu>=1.21.0",
 ]
 sfno = [
     "makani",

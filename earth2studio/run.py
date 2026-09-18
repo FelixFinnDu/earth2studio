@@ -20,6 +20,7 @@ from math import ceil
 
 import numpy as np
 import torch
+import torch_sdaa
 from loguru import logger
 from tqdm import tqdm
 
@@ -89,7 +90,7 @@ def deterministic(
     device = (
         device
         if device is not None
-        else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else torch.device("sdaa" if torch.sdaa.is_available() else "cpu")
     )
     logger.info(f"Inference device: {device}")
     prognostic = prognostic.to(device)
