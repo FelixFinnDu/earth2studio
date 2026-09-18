@@ -239,8 +239,6 @@ corrdiff = [
     "scipy>=1.15.2",
 ]
 cyclone = [
-    "cucim-cu13>=25.4.0",
-    "cupy-cuda13x",
     "scikit-image>=0.25.2",
 ]
 derived = []

@@ -31,19 +31,21 @@ from earth2studio.utils.imports import (
 from earth2studio.utils.type import CoordSystem
 
 try:
-    import cupy as cp
-    from cucim.skimage.feature import peak_local_max as cucim_peak_local_max
-    from cucim.skimage.measure import label, regionprops
-    from cucim.skimage.morphology import binary_erosion, remove_small_objects
+    # import cupy as cp
+    # from cucim.skimage.feature import peak_local_max as cucim_peak_local_max
+    # from cucim.skimage.measure import label, regionprops
+    # from cucim.skimage.morphology import binary_erosion, remove_small_objects
     from scipy.spatial import KDTree
+    from skimage.measure import label, regionprops
+    from skimage.morphology import binary_erosion, remove_small_objects
     from skimage.feature import peak_local_max as skimage_peak_local_max
     from skimage.morphology import convex_hull_image
 
     # from cupyx.scipy.spatial import KDTree as CuKDTree
 except ImportError:
     OptionalDependencyFailure("cyclone")
-    cp = None
-    cucim_peak_local_max = None
+    # cp = None
+    # cucim_peak_local_max = None
     label = None
     regionprops = None
     binary_erosion = None
@@ -200,24 +202,24 @@ class _TCTrackerBase:
         torch.Tensor
             List of coordinates of local maximum [2, N]
         """
-        if x.is_cuda:
-            x_ = cp.from_dlpack(x)
-            local_max = cucim_peak_local_max(
-                x_,
-                threshold_abs=threshold_abs,
-                min_distance=min_distance,
-                exclude_border=exclude_border,
-            )
-            local_max = torch.from_dlpack(local_max)
-        else:
-            x_ = np.from_dlpack(x)
-            local_max = skimage_peak_local_max(
-                x_,
-                threshold_abs=threshold_abs,
-                min_distance=min_distance,
-                exclude_border=exclude_border,
-            )
-            local_max = torch.as_tensor(local_max, device=x.device)
+        # if x.is_cuda:
+        #     x_ = cp.from_dlpack(x)
+        #     local_max = cucim_peak_local_max(
+        #         x_,
+        #         threshold_abs=threshold_abs,
+        #         min_distance=min_distance,
+        #         exclude_border=exclude_border,
+        #     )
+        #     local_max = torch.from_dlpack(local_max)
+        # else:
+        x_ = np.from_dlpack(x)
+        local_max = skimage_peak_local_max(
+            x_,
+            threshold_abs=threshold_abs,
+            min_distance=min_distance,
+            exclude_border=exclude_border,
+        )
+        local_max = torch.as_tensor(local_max, device=x.device)
 
         return local_max
 
@@ -470,18 +472,18 @@ class TCTrackerWuDuan(torch.nn.Module, _TCTrackerBase):
             List of TC centers, torch.Tensor of shape [N, 4]
         """
 
-        if vort850.is_cuda:
-            v_ = cp.from_dlpack(vort850)
-        else:
-            v_ = cp.array(np.from_dlpack(vort850))
-        if w10m.is_cuda:
-            w10m_ = cp.from_dlpack(w10m)
-        else:
-            w10m_ = cp.array(np.from_dlpack(w10m))
-        if msl.is_cuda:
-            msl_ = cp.from_dlpack(msl)
-        else:
-            msl_ = cp.array(np.from_dlpack(msl))
+        # if vort850.is_cuda:
+        #     v_ = cp.from_dlpack(vort850)
+        # else:
+        v_ = np.array(np.from_dlpack(vort850))
+        # if w10m.is_cuda:
+        #     w10m_ = cp.from_dlpack(w10m)
+        # else:
+        w10m_ = np.array(np.from_dlpack(w10m))
+        # if msl.is_cuda:
+        #     msl_ = cp.from_dlpack(msl)
+        # else:
+        msl_ = np.array(np.from_dlpack(msl))
         vort850_threshold = float(vort850_threshold)
         x_ = v_ > vort850_threshold
         # Label regions
@@ -514,12 +516,12 @@ class TCTrackerWuDuan(torch.nn.Module, _TCTrackerBase):
             # calculate exact center of storm in longitude and latitude coordinates
             # weighted centroid position of center pixels are used (weighted by vorticity)
             lat_idx, lon_idx = prop.centroid_weighted
-            grid_spacing = lon[int(cp.ceil(lon_idx))] - lon[int(cp.floor(lon_idx))]
-            residual_step = float(lon_idx - cp.floor(lon_idx))
-            lon_ = lon[int(cp.floor(lon_idx))] + residual_step * grid_spacing
-            grid_spacing = lat[int(cp.ceil(lat_idx))] - lat[int(cp.floor(lat_idx))]
-            residual_step = float(lat_idx - cp.floor(lat_idx))
-            lat_ = lat[int(cp.floor(lat_idx))] + residual_step * grid_spacing
+            grid_spacing = lon[int(np.ceil(lon_idx))] - lon[int(np.floor(lon_idx))]
+            residual_step = float(lon_idx - np.floor(lon_idx))
+            lon_ = lon[int(np.floor(lon_idx))] + residual_step * grid_spacing
+            grid_spacing = lat[int(np.ceil(lat_idx))] - lat[int(np.floor(lat_idx))]
+            residual_step = float(lat_idx - np.floor(lat_idx))
+            lat_ = lat[int(np.floor(lat_idx))] + residual_step * grid_spacing
 
             # erode object to get center of storm
             bool_center = binary_erosion(x_label[prop_slice_ext]).astype(bool)
@@ -530,7 +532,7 @@ class TCTrackerWuDuan(torch.nn.Module, _TCTrackerBase):
 
             # check solidity of storm center (eroded object) and storm (uneroded object)
             solidity_center = (
-                bool_center.sum() / convex_hull_image(bool_center.get()).sum()
+                bool_center.sum() / convex_hull_image(bool_center).sum()
             )
             solidity_storm = prop.solidity
             # objects that are not solid have many holes in the vorticity field are not a tropical storm
@@ -559,10 +561,10 @@ class TCTrackerWuDuan(torch.nn.Module, _TCTrackerBase):
             # calculate the mean of the voritcity of the border pixels and the center pixels
             v_sub1 = copy(v_[prop_slice_ext])
             v_sub2 = copy(v_sub1)
-            cp.putmask(v_sub1, ~bool_center, cp.nan)
-            cp.putmask(v_sub2, ~bool_border, cp.nan)
-            mean_inner = cp.nanmean(v_sub1)
-            mean_outer = cp.nanmean(v_sub2)
+            np.putmask(v_sub1, ~bool_center, np.nan)
+            np.putmask(v_sub2, ~bool_border, np.nan)
+            mean_inner = np.nanmean(v_sub1)
+            mean_outer = np.nanmean(v_sub2)
 
             # mean voriticty in the center must be larger than mean vorticity at the border of the storm
             if mean_inner > mean_outer:
