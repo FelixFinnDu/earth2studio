@@ -888,10 +888,22 @@ class TCTrackerVitart(torch.nn.Module, _TCTrackerBase):
             (lat[msllm[:, 0], msllm[:, 1]], lon[msllm[:, 0], msllm[:, 1]]), dim=1
         )
 
-        dzlm = TCTrackerVitart.get_local_max(dz_200_850, exclude_border=exclude_border)
-        dzlm_loc = torch.stack(
-            (lat[dzlm[:, 0], dzlm[:, 1]], lon[dzlm[:, 0], dzlm[:, 1]]), dim=1
-        )
+        # A valid Vitart center has to pass all four filters below. If any
+        # required candidate set is empty, no center can be identified in
+        # this frame. Return a fill value instead of calling min()/argmin()
+        # on an empty distance tensor.
+        if (
+            vlm.numel() == 0
+            or tlm.numel() == 0
+            or dzlm.numel() == 0
+            or msllm.numel() == 0
+        ):
+            return torch.full(
+                (1, 4),
+                self.PATH_FILL_VALUE,
+                dtype=msl.dtype,
+                device=msl.device,
+            )
 
         centers = []
         for i, mins in enumerate(mlm_loc):
@@ -994,12 +1006,26 @@ class TCTrackerVitart(torch.nn.Module, _TCTrackerBase):
         if lat.shape != lon.shape:
             raise ValueError("Error, lat/lon grids must be the same shape.")
 
+        lat_slice = None
         if self.lat_threshold is not None:
-            _, nlon = lat.shape
-            indices = lat.abs() < self.lat_threshold
+            # The tracker operates on a regular lat/lon grid, so latitude is
+            # constant along each longitude row. Determine the valid latitude
+            # rows on CPU and use basic slicing instead of 2-D boolean advanced
+            # indexing. This avoids dynamic-shape/SymInt issues on accelerator
+            # backends and is equivalent for the regular Earth2Studio grid.
+            lat_axis = lat[:, 0].detach().cpu().numpy()
+            valid_rows = np.flatnonzero(np.abs(lat_axis) < self.lat_threshold)
+            if valid_rows.size == 0:
+                raise ValueError(
+                    f"No latitude rows found within +/-{self.lat_threshold} degrees."
+                )
 
-            lat = lat[indices].reshape(-1, nlon)
-            lon = lon[indices].reshape(-1, nlon)
+            lat_start = int(valid_rows[0])
+            lat_end = int(valid_rows[-1]) + 1
+            lat_slice = slice(lat_start, lat_end)
+
+            lat = lat[lat_slice, :]
+            lon = lon[lat_slice, :]
 
         def get_variable(x0: torch.Tensor, var: str) -> torch.Tensor:
             index = VARIABLES_TCV.index(var)
@@ -1035,12 +1061,12 @@ class TCTrackerVitart(torch.nn.Module, _TCTrackerBase):
         # Get z200 - z850 width
         dz_200_850 = get_variable(x, "z200") - get_variable(x, "z850")
 
-        if self.lat_threshold is not None:
-            w10m = w10m[:, indices].reshape(x.shape[0], -1, nlon)
-            msl = msl[:, indices].reshape(x.shape[0], -1, nlon)
-            vort850 = vort850[:, indices].reshape(x.shape[0], -1, nlon)
-            t_200_500_mean = t_200_500_mean[:, indices].reshape(x.shape[0], -1, nlon)
-            dz_200_850 = dz_200_850[:, indices].reshape(x.shape[0], -1, nlon)
+        if lat_slice is not None:
+            w10m = w10m[:, lat_slice, :]
+            msl = msl[:, lat_slice, :]
+            vort850 = vort850[:, lat_slice, :]
+            t_200_500_mean = t_200_500_mean[:, lat_slice, :]
+            dz_200_850 = dz_200_850[:, lat_slice, :]
 
         outs = []
         for i in range(x.shape[0]):
